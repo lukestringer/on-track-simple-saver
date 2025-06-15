@@ -1,26 +1,77 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #8e8282;
   --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* --debug: 0px; */
+  --debug: 1px;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+.base-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  width: 100vw;
+  height: 100vh;
+  border: var(--debug) solid blue;
+  background-color: #b9b6bd;
+}
+
+.header-container,
+.graph,
+.add-progress {
+}
+
+.header-container {
+  text-align: center;
+  border: var(--debug) solid red;
+}
+
+.graph {
+  min-width: 60vw;
+  height: 40vw;
+  display: flex;
+  align-items: center;
+  border: var(--debug) solid purple;
+}
+
+.graph .responsive-container {
+  align-self: center;
+  border: var(--debug) solid brown;
+}
+
+.add-progress {
+  padding: 1rem 2rem;
+  border: var(--debug) solid green;
+}
+
+.add-progress form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+input {
+  background-color: #cec5c5;
+  border: 2px solid #171717;
+  border-radius: 4px;
+  margin: 0.5rem;
+}
+
+input:focus {
+  border: 3px solid black;
+}
+
+button {
+  background-color: darkblue;
+  color: white;
+  padding: 0.4rem 0.75rem;
+  margin: 0.25rem;
+  border-radius: 10px;
 }

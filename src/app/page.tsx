@@ -1,103 +1,130 @@
-import Image from "next/image";
+"use client";
+
+// pages/index.tsx
+import React, { useState } from "react";
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+
+// Function to generate example graph data
+const getExampleGraphData = () => {
+  const startDate = new Date("2025-06-01");
+  const endDate = new Date("2025-12-31");
+  const startAmount = 0;
+  const endAmount = 5000;
+  const dates = [
+    "2025-06-01",
+    "2025-07-01",
+    "2025-08-01",
+    "2025-09-01",
+    "2025-10-01",
+    "2025-11-01",
+    "2025-12-31",
+  ];
+
+  // Hardcoded data with clear point-to-point values.
+  const hardcodedData = [
+    { date: "2025-01-01", baseline: 0, actual: 0 },
+    { date: "2025-07-01", baseline: null, actual: 850 },
+    { date: "2025-08-01", baseline: null, actual: 1900 },
+    { date: "2025-09-01", baseline: null, actual: 2750 },
+    { date: "2025-10-01", baseline: null, actual: 3600 },
+    { date: "2025-11-01", baseline: null, actual: 4300 },
+    { date: "2025-12-31", baseline: 5000, actual: 5000 },
+  ];
+
+  return hardcodedData;
+};
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  // Local state to store the current graph data
+  const [graphData, setGraphData] = useState(getExampleGraphData());
+  const [newProgress, setNewProgress] = useState("");
+  const [newDate, setNewDate] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const handleAddProgressSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    // setGraphData((prevData) => [...prevData, newProgress]);
+  };
+
+  const todayString = new Date().toISOString().split("T")[0]; //today is latest date progress can be recorded
+
+  return (
+    <div className="base-container">
+      <div className="header-container">
+        <h1>On Track Simple Saver Demo</h1>
+        <p>
+          This demo shows what your savings goal tracking could look like with
+          example data.
+        </p>
+      </div>
+      <div className={"graph"}>
+        <ResponsiveContainer className={"responsive-container"}>
+          <LineChart
+            data={graphData}
+            margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Legend />
+            {/* Baseline Goal Line */}
+            <Line
+              type="linear"
+              dataKey="baseline"
+              name="Goal Line"
+              stroke="#000000"
+              strokeWidth={3}
+              dot={false}
+              connectNulls={true}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            {/* Progress Line (example actual savings progress) */}
+            <Line
+              type="stepAfter"
+              dataKey="actual"
+              name="Progress"
+              stroke="#00853f"
+              strokeWidth={3}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="add-progress">
+        <form onSubmit={handleAddProgressSubmit}>
+          <div>
+            <label>
+              Progress Amount:
+              <input
+                type="number"
+                value={newProgress}
+                onChange={(e) => setNewProgress(e.target.value)}
+                required
+              />
+            </label>
+          </div>
+          <div>
+            <label>
+              Progress Date:
+              <input
+                type="date"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                max={todayString} // Prevents selecting future dates
+                required
+              />
+            </label>
+          </div>
+          <button type="submit">Add Progress Update</button>
+        </form>
+      </div>
     </div>
   );
 }
