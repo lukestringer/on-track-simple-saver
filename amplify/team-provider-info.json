@@ -1,0 +1,20 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-ontracksimplesaver-dev-9de5d-authRole",
+      "UnauthRoleArn": "arn:aws:iam::289427881637:role/amplify-ontracksimplesaver-dev-9de5d-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::289427881637:role/amplify-ontracksimplesaver-dev-9de5d-authRole",
+      "Region": "ap-southeast-2",
+      "DeploymentBucketName": "amplify-ontracksimplesaver-dev-9de5d-deployment",
+      "UnauthRoleName": "amplify-ontracksimplesaver-dev-9de5d-unauthRole",
+      "StackName": "amplify-ontracksimplesaver-dev-9de5d",
+      "StackId": "arn:aws:cloudformation:ap-southeast-2:289427881637:stack/amplify-ontracksimplesaver-dev-9de5d/9d98add0-4aaa-11f0-aa49-0220d1c2ce65",
+      "AmplifyAppId": "d3b5oaklt7daiy"
+    },
+    "categories": {
+      "auth": {
+        "ontracksimplesaver9b10e750": {}
+      }
+    }
+  }
+}

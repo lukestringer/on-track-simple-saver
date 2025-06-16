@@ -335,6 +335,7 @@ export default function Home() {
       <div className="add-boxes">
         <div className="add-progress">
           <h2>Progress Update</h2>
+          {/* TODO style this so it is centered horizontally (and change to inline with tailwind.) */}
           <form onSubmit={handleAddProgressSubmit}>
             <label>
               <span>Amount:</span>
@@ -359,7 +360,7 @@ export default function Home() {
           </form>
         </div>
         <div className="add-goal">
-          <h2>Goal Update</h2>
+          <h2>Change Goal</h2>
           <form onSubmit={handleAddGoalSubmit}>
             <label>
               <span>Start Amount:</span>
@@ -397,7 +398,7 @@ export default function Home() {
                 required
               />
             </label>
-            <button type="submit">Add Progress Update</button>
+            <button type="submit">Update Goal</button>
           </form>
         </div>
       </div>
