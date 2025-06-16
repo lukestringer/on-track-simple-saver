@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --background: #8e8282;
-  --foreground: #171717;
-  /* --debug: 0px; */
-  --debug: 1px;
+  --background: #fff;
+  --foreground: #000000;
+  --debug: 0px;
+  /* --debug: 1px; */
 }
 
 body {
@@ -20,17 +20,24 @@ body {
   width: 100vw;
   height: 100vh;
   border: var(--debug) solid blue;
-  background-color: #b9b6bd;
+  background-color: #efefef;
 }
 
 .header-container,
 .graph,
-.add-progress {
+.add-progress,
+.add-goal {
+  border-radius: 10px;
+  background-color: #fff;
+  padding: 1rem 2rem;
 }
 
 .header-container {
   text-align: center;
   border: var(--debug) solid red;
+  border-radius: 10px;
+  background-color: #fff;
+  padding: 1rem 2rem;
 }
 
 .graph {
@@ -46,30 +53,65 @@ body {
   border: var(--debug) solid brown;
 }
 
-.add-progress {
+.add-boxes {
+  display: flex;
+  justify-content: space-evenly;
+  width: 60vw;
+  border: var(--debug) solid red;
+}
+
+.add-progress,
+.add-goal {
   padding: 1rem 2rem;
   border: var(--debug) solid green;
 }
 
-.add-progress form {
+form {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-input {
-  background-color: #cec5c5;
-  border: 2px solid #171717;
-  border-radius: 4px;
-  margin: 0.5rem;
+label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  border: var(--debug) solid blueviolet;
 }
 
-input:focus {
-  border: 3px solid black;
+label span {
+  margin-right: 0.5em;
+  border: var(--debug) solid red;
+}
+
+label input {
+  min-width: 1rem;
+  border: var(--debug) solid orange;
+}
+
+h1 {
+  text-align: center;
+  font-size: x-large;
+  font-weight: bold;
+}
+
+h2 {
+  text-align: center;
+  font-size: large;
+  font-weight: bold;
+}
+
+input {
+  padding: 0.3rem 0.7rem;
+  margin: 0.5rem;
+  background-color: #f7f7f8;
+  border-radius: 4px;
+  outline: auto;
 }
 
 button {
-  background-color: darkblue;
+  background-color: #285238;
   color: white;
   padding: 0.4rem 0.75rem;
   margin: 0.25rem;

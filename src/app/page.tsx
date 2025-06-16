@@ -3,127 +3,403 @@
 // pages/index.tsx
 import React, { useState } from "react";
 import {
-  LineChart,
-  Line,
-  CartesianGrid,
-  XAxis,
-  YAxis,
+  Chart as ChartJS,
+  ChartOptions,
+  CategoryScale,
+  LinearScale,
+  TimeScale,
+  PointElement,
+  LineElement,
+  Title,
   Tooltip,
   Legend,
-  ResponsiveContainer,
-} from "recharts";
+} from "chart.js";
+import annotationPlugin from "chartjs-plugin-annotation";
+import "chartjs-adapter-date-fns"; // Date adapter for time scale support
+import { Line } from "react-chartjs-2";
+import { randomInt } from "crypto";
+import { start } from "repl";
 
-// Function to generate example graph data
-const getExampleGraphData = () => {
-  const startDate = new Date("2025-06-01");
-  const endDate = new Date("2025-12-31");
-  const startAmount = 0;
-  const endAmount = 5000;
-  const dates = [
-    "2025-06-01",
-    "2025-07-01",
-    "2025-08-01",
-    "2025-09-01",
-    "2025-10-01",
-    "2025-11-01",
-    "2025-12-31",
-  ];
-
-  // Hardcoded data with clear point-to-point values.
-  const hardcodedData = [
-    { date: "2025-01-01", baseline: 0, actual: 0 },
-    { date: "2025-07-01", baseline: null, actual: 850 },
-    { date: "2025-08-01", baseline: null, actual: 1900 },
-    { date: "2025-09-01", baseline: null, actual: 2750 },
-    { date: "2025-10-01", baseline: null, actual: 3600 },
-    { date: "2025-11-01", baseline: null, actual: 4300 },
-    { date: "2025-12-31", baseline: 5000, actual: 5000 },
-  ];
-
-  return hardcodedData;
+type ChartDataItem = {
+  date: string;
+  goal: number;
+  progress?: number | null;
 };
 
-export default function Home() {
-  // Local state to store the current graph data
-  const [graphData, setGraphData] = useState(getExampleGraphData());
-  const [newProgress, setNewProgress] = useState("");
-  const [newDate, setNewDate] = useState("");
+type ProgressData = {
+  date: string;
+  progress: number;
+};
 
-  const handleAddProgressSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+type GoalData = {
+  startDate: string;
+  startAmount: number;
+  endDate: string;
+  endAmount: number;
+};
+
+// Register the necessary Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  TimeScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  annotationPlugin
+);
+
+/**
+ * Calculates the projected goal amount based on the progress date's position in the goal period.
+ *
+ * @param goalData - Object containing startDate, endDate, and goalAmount.
+ * @param newProgressDate - The date for which progress is being measured.
+ * @returns The estimated goal amount proportional to the progress date.
+ */
+function calculateGoalAmount(goalData: GoalData, newProgressDate: string): number {
+  const startTime = new Date(goalData.startDate).getTime();
+  const endTime = new Date(goalData.endDate).getTime();
+  const progressTime = new Date(newProgressDate).getTime();
+
+  if (isNaN(startTime) || isNaN(endTime) || isNaN(progressTime)) {
+    throw new Error("Invalid date format. Ensure all dates are in 'YYYY-MM-DD' format.");
+  }
+
+  // if (progressTime < startTime || progressTime > endTime) {
+  //   return 0;
+  // }
+
+  const progressPercentage = (progressTime - startTime) / (endTime - startTime);
+  const goalAmount = progressPercentage * (goalData.endAmount - goalData.startAmount) + goalData.startAmount;
+  return goalAmount;
+}
+
+/**
+ * Inserts a new progress entry into a sorted graphData array while maintaining chronological order.
+ *
+ * If the new entry's date is later than the last item, it is simply appended.
+ * Uses binary search for fast insertion when inserting an older entry.
+ *
+ * @param graphData - Array of existing progress entries, sorted by date.
+ * @param newEntry - The new progress entry to insert.
+ * @returns A new array with the new entry placed in the correct position.
+ */
+function insertSortedGraphData(graphData: ChartDataItem[], newEntry: ChartDataItem): ChartDataItem[] {
+  const newDate: number = new Date(newEntry.date).getTime();
+  const lastEntry = graphData[graphData.length - 1];
+
+  // Fast path: If it's the latest date, just push it (O(1))
+  if (lastEntry && newDate > new Date(lastEntry.date).getTime()) {
+    return [...graphData, newEntry];
+  }
+
+  // Binary search to find insertion index
+  let left = 0,
+    right = graphData.length - 1;
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const midDate = new Date(graphData[mid].date).getTime();
+    if (midDate < newDate) {
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  // Insert into the correct position (O(n) due to shifting elements)
+  const newGraphData = [...graphData];
+  newGraphData.splice(left, 0, newEntry);
+  return newGraphData;
+}
+
+function updateGoalAmounts(graphData: ChartDataItem[], newGoalData: GoalData): ChartDataItem[] {
+  //TODO deal with some weird behaviour about the chart updating when the date is changed (after a new goal update has happened) probably to do with having so many state variables as well...
+  //update start and end data points
+  const startIndex = graphData.findIndex((data) => data.date === newGoalData.startDate);
+  const endIndex = graphData.findIndex((data) => data.date === newGoalData.endDate);
+
+  if (startIndex !== -1) {
+    //existing entry with same date
+    console.log("same start time");
+    graphData[startIndex].goal = newGoalData.startAmount;
+  } else {
+    //add new start date entry
+    graphData = [{ date: newGoalData.startDate, goal: newGoalData.startAmount, progress: null }, ...graphData];
+  }
+  if (endIndex !== -1) {
+    //existing entry with same date
+    graphData[endIndex].goal = newGoalData.endAmount;
+  } else {
+    //add new end date entry
+    graphData = [...graphData, { date: newGoalData.endDate, goal: newGoalData.endAmount, progress: null }];
+  }
+
+  let startTime = new Date(newGoalData.startDate).getTime();
+  let endTime = new Date(newGoalData.endDate).getTime();
+  let m = (newGoalData.endAmount - newGoalData.startAmount) / (endTime - startTime);
+  let c = newGoalData.endAmount - m * endTime;
+
+  for (let i = 0; i < graphData.length; i++) {
+    let time = new Date(graphData[i].date).getTime();
+    graphData[i].goal = m * time + c;
+    //if there are data points outside of new goal data range which don't have progress data, remove them
+    if ((time < startTime || time > endTime) && graphData[i].progress === null) {
+      graphData.splice(i, 1);
+    }
+  }
+
+  return graphData;
+}
+
+export default function Home() {
+  const [goalData, setGoalData] = useState<GoalData>({
+    startDate: "2025-01-01",
+    endDate: "2025-12-31",
+    startAmount: 0,
+    endAmount: 12000,
+  });
+
+  //Hardcoded initial values for demo purpose
+  const demoGraphData: ChartDataItem[] = [
+    { date: goalData.startDate, goal: goalData.startAmount, progress: 0 },
+    { date: "2025-02-01", goal: 1000, progress: 1500 },
+    { date: "2025-03-01", goal: 2000, progress: 2200 },
+    { date: "2025-04-01", goal: 3000, progress: 2450 },
+    { date: "2025-05-01", goal: 4000, progress: 3800 },
+    { date: goalData.endDate, goal: goalData.endAmount, progress: null },
+  ];
+
+  // Local state to store the current graph data
+  const [graphData, setGraphData] = useState(demoGraphData);
+  const todayString = new Date().toISOString().split("T")[0];
+  //default is empty -- TODO load in data here
+  //const [graphData, setGraphData] = useState([{date: todayString, goal: 0, progress: 0}]);
+  const [progressFormData, setProgressFormData] = useState("");
+  const [progressDateFormData, setProgressDateFormData] = useState("");
+  const [goalStartFormData, setStartGoalFormData] = useState("");
+  const [goalStartDateFormData, setStartGoalDateFormData] = useState("");
+  const [goalEndFormData, setEndGoalFormData] = useState("");
+  const [goalEndDateFormData, setEndGoalDateFormData] = useState("");
+
+  const handleAddProgressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // setGraphData((prevData) => [...prevData, newProgress]);
+    const newDate = progressDateFormData; //convenience var
+    const newProgress = parseFloat(progressFormData);
+
+    // Validate that the selected date defined and is not in the future.
+    if (newDate != undefined && new Date(newDate).getTime() > new Date(todayString).getTime()) {
+      //TODO show error on date field or progress field
+      return;
+    }
+    if (isNaN(newProgress)) {
+      //TODO show error on progress
+      return;
+    }
+
+    let updatedGraphData: ChartDataItem[];
+    const index = graphData.findIndex((data) => data.date === newDate);
+    if (index !== -1) {
+      // If the progress date already exists, replace it.
+      //TODO ask user if they want to replace it or use old value
+      updatedGraphData = [...graphData];
+      updatedGraphData[index] = {
+        date: newDate,
+        progress: newProgress,
+        goal: calculateGoalAmount(goalData, newDate),
+      };
+    } else {
+      // Otherwise, simply append a new entry.
+      const newGoalAmount = calculateGoalAmount(goalData, newDate);
+      const newData = { date: newDate, progress: newProgress, goal: newGoalAmount };
+      updatedGraphData = insertSortedGraphData(graphData, newData);
+    }
+
+    setGraphData(updatedGraphData);
   };
 
-  const todayString = new Date().toISOString().split("T")[0]; //today is latest date progress can be recorded
+  // Prepare Chart.js data: using object notation in the datasets so that the
+  // time scale reads the x (date) values correctly.
+  const chartData = {
+    datasets: [
+      {
+        label: "Goal Line",
+        data: graphData.map((item) => ({ x: item.date, y: item.goal })),
+        borderColor: "#000000",
+        borderWidth: 3,
+        fill: false,
+        tension: 0,
+        pointRadius: 0,
+        spanGaps: true,
+      },
+      {
+        label: "Progress",
+        data: graphData.map((item) => ({ x: item.date, y: item.progress })),
+        borderColor: "#00853f",
+        borderWidth: 3,
+        stepped: true,
+        fill: false,
+        pointRadius: 3,
+        spanGaps: true,
+      },
+    ],
+  };
+
+  const handleAddGoalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const startTime = new Date(goalStartDateFormData).getTime();
+    const endTime = new Date(goalEndDateFormData).getTime();
+
+    const newStartGoal = parseFloat(goalStartFormData);
+    const newEndGoal = parseFloat(goalEndFormData);
+
+    if (isNaN(newStartGoal) || isNaN(newEndGoal)) {
+      throw new Error("Goal amounts must be numbers.");
+    }
+
+    const newGoal: GoalData = {
+      startDate: goalStartDateFormData,
+      startAmount: newStartGoal,
+      endDate: goalEndDateFormData,
+      endAmount: newEndGoal,
+    };
+
+    //fill in inbetween values
+
+    let updatedGraphData = updateGoalAmounts(graphData, newGoal);
+    setGraphData(updatedGraphData);
+  };
+  // Chart.js options with a time scale for the x-axis.
+  const chartOptions: ChartOptions<"line"> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        type: "time",
+        time: {
+          unit: "month",
+          tooltipFormat: "dd MMM yyyy",
+          displayFormats: {
+            month: "MMM",
+          },
+        },
+        title: {
+          display: true,
+          text: "Date",
+        },
+      },
+      y: {
+        title: {
+          display: true,
+          text: "Amount",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "top",
+      },
+      tooltip: {
+        mode: "index",
+        intersect: false,
+      },
+      annotation: {
+        annotations: {
+          todayLine: {
+            type: "line",
+            // Using xMin and xMax creates a vertical line at the given date value.
+            xMin: todayString,
+            xMax: todayString,
+            borderColor: "blue",
+            borderWidth: 2,
+          },
+        },
+      },
+    },
+  };
 
   return (
     <div className="base-container">
       <div className="header-container">
-        <h1>On Track Simple Saver Demo</h1>
-        <p>
-          This demo shows what your savings goal tracking could look like with
-          example data.
-        </p>
+        <h2>Demo</h2>
+        <h1>On Track - Simple Saver </h1>
+        <p>This demo shows what your savings goal tracking could look like with example data.</p>
       </div>
-      <div className={"graph"}>
-        <ResponsiveContainer className={"responsive-container"}>
-          <LineChart
-            data={graphData}
-            margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
-            <YAxis />
-            <Legend />
-            {/* Baseline Goal Line */}
-            <Line
-              type="linear"
-              dataKey="baseline"
-              name="Goal Line"
-              stroke="#000000"
-              strokeWidth={3}
-              dot={false}
-              connectNulls={true}
-            />
-            {/* Progress Line (example actual savings progress) */}
-            <Line
-              type="stepAfter"
-              dataKey="actual"
-              name="Progress"
-              stroke="#00853f"
-              strokeWidth={3}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="graph" style={{ height: "400px" }}>
+        <Line data={chartData} options={chartOptions} />
       </div>
-      <div className="add-progress">
-        <form onSubmit={handleAddProgressSubmit}>
-          <div>
+
+      <div className="add-boxes">
+        <div className="add-progress">
+          <h2>Progress Update</h2>
+          <form onSubmit={handleAddProgressSubmit}>
             <label>
-              Progress Amount:
+              <span>Amount:</span>
               <input
                 type="number"
-                value={newProgress}
-                onChange={(e) => setNewProgress(e.target.value)}
+                value={progressFormData}
+                onChange={(e) => setProgressFormData(e.target.value)}
                 required
               />
             </label>
-          </div>
-          <div>
             <label>
-              Progress Date:
+              <span>Date:</span>
               <input
                 type="date"
-                value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
+                value={progressDateFormData}
+                onChange={(e) => setProgressDateFormData(e.target.value)}
                 max={todayString} // Prevents selecting future dates
                 required
               />
             </label>
-          </div>
-          <button type="submit">Add Progress Update</button>
-        </form>
+            <button type="submit">Add Progress Update</button>
+          </form>
+        </div>
+        <div className="add-goal">
+          <h2>Goal Update</h2>
+          <form onSubmit={handleAddGoalSubmit}>
+            <label>
+              <span>Start Amount:</span>
+              <input
+                type="number"
+                value={goalStartFormData}
+                onChange={(e) => setStartGoalFormData(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>Start Date:</span>
+              <input
+                type="date"
+                value={goalStartDateFormData}
+                onChange={(e) => setStartGoalDateFormData(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>End Amount:</span>
+              <input
+                type="number"
+                value={goalEndFormData}
+                onChange={(e) => setEndGoalFormData(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>End Date:</span>
+              <input
+                type="date"
+                value={goalEndDateFormData}
+                onChange={(e) => setEndGoalDateFormData(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit">Add Progress Update</button>
+          </form>
+        </div>
       </div>
     </div>
   );
