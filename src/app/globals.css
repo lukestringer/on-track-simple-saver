@@ -117,3 +117,9 @@ button {
   margin: 0.25rem;
   border-radius: 10px;
 }
+
+.loginBtn {
+  position: fixed;
+  top: 2vw;
+  right: 3vw;
+}

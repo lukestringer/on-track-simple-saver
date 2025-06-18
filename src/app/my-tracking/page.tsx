@@ -1,7 +1,9 @@
 "use client";
 import { Amplify } from "aws-amplify";
-import awsExports from "../aws-exports";
+import { signOut } from "aws-amplify/auth";
 import Link from "next/link";
+
+import awsExports from "../../aws-exports";
 
 Amplify.configure(awsExports);
 
@@ -41,6 +43,14 @@ type GoalData = {
   endDate: string;
   endAmount: number;
 };
+
+async function handleSignOut() {
+  try {
+    await signOut();
+  } catch (error) {
+    console.log("error signing out: ", error);
+  }
+}
 
 // Register the necessary Chart.js components
 ChartJS.register(
@@ -157,7 +167,7 @@ function updateGoalAmounts(graphData: ChartDataItem[], newGoalData: GoalData): C
   return graphData;
 }
 
-function Home() {
+function MyTracking() {
   const [goalData, setGoalData] = useState<GoalData>({
     startDate: "2025-01-01",
     endDate: "2025-12-31",
@@ -328,9 +338,7 @@ function Home() {
   return (
     <div className="base-container">
       <div className="header-container">
-        <h2>Demo</h2>
         <h1>On Track - Simple Saver </h1>
-        <p>This demo shows what your savings goal tracking could look like with example data.</p>
       </div>
       <div className="graph" style={{ height: "400px" }}>
         <Line data={chartData} options={chartOptions} />
@@ -406,11 +414,11 @@ function Home() {
           </form>
         </div>
       </div>
-      <Link href="/my-tracking">
-        <button className="loginBtn">Login or Sign Up</button>
-      </Link>
+      <button className="loginBtn" onClick={handleSignOut}>
+        Logout
+      </button>
     </div>
   );
 }
 
-export default Home;
+export default withAuthenticator(MyTracking);
