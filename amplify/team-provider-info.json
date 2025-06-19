@@ -14,6 +14,9 @@
     "categories": {
       "auth": {
         "ontracksimplesaver9b10e750": {}
+      },
+      "api": {
+        "ontracksimplesaver": {}
       }
     }
   }

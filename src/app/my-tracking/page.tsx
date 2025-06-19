@@ -1,13 +1,20 @@
+// pages/index.tsx
 "use client";
 import { Amplify } from "aws-amplify";
 import { signOut } from "aws-amplify/auth";
-import Link from "next/link";
-
+// import Link from "next/link";
+// import API from "aws-amplify";
+import {
+  createGoal,
+  updateGoal,
+  createProgressUpdate,
+  updateProgressUpdate,
+  deleteProgressUpdate,
+  deleteGoal,
+} from "@/graphql/mutations";
+import { generateClient } from "aws-amplify/api";
+// import {createGoal} from "../../graphql/mutations"
 import awsExports from "../../aws-exports";
-
-Amplify.configure(awsExports);
-
-// pages/index.tsx
 import React, { useState } from "react";
 import {
   Chart as ChartJS,
@@ -25,6 +32,12 @@ import annotationPlugin from "chartjs-plugin-annotation";
 import "chartjs-adapter-date-fns"; // Date adapter for time scale support
 import { Line } from "react-chartjs-2";
 import { withAuthenticator } from "@aws-amplify/ui-react";
+import { getGoal, listGoals } from "@/graphql/queries";
+
+Amplify.configure(awsExports);
+const client = generateClient();
+
+type UserOnTrackData = { goal: GoalData; progressPoints: ChartDataItem[] };
 
 type ChartDataItem = {
   date: string;
@@ -32,21 +45,48 @@ type ChartDataItem = {
   progress?: number | null;
 };
 
-type ProgressData = {
-  date: string;
-  progress: number;
-};
+// type ProgressData = {
+//   date: string;
+//   progress: number;
+// };
 
 type GoalData = {
+  //TODO Add id to GoalData to prevent fetching more than necessary when saving the goal
   startDate: string;
   startAmount: number;
   endDate: string;
   endAmount: number;
 };
 
+async function saveGoal(goalInput: GoalData) {
+  //TODO prevent updates if existing data is same as old data. (And maybe prevent frequent updates?)
+  console.log("Saving goal data...");
+  try {
+    const listGoalsResult = await client.graphql({ query: listGoals });
+    const listedGoals = listGoalsResult.data.listGoals;
+    if (listedGoals.items.length > 0) {
+      const input = {
+        id: listedGoals.items[0].id,
+        startAmount: goalInput.startAmount,
+        startDate: goalInput.startDate,
+        endAmount: goalInput.endAmount,
+        endDate: goalInput.endDate,
+      };
+      const updateResult = await client.graphql({ query: updateGoal, variables: { input: input } });
+      console.log("Goal updated:", updateResult.data.updateGoal);
+    } else {
+      const createResult = await client.graphql({ query: createGoal, variables: { input: goalInput } });
+      console.log("Goal created:", createResult.data.createGoal);
+    }
+  } catch (error) {
+    console.error("Error creating goal:", error);
+  }
+}
+
 async function handleSignOut() {
   try {
     await signOut();
+    //TODO redirect to home page
   } catch (error) {
     console.log("error signing out: ", error);
   }
@@ -129,22 +169,22 @@ function insertSortedGraphData(graphData: ChartDataItem[], newEntry: ChartDataIt
 }
 
 function updateGoalAmounts(graphData: ChartDataItem[], newGoalData: GoalData): ChartDataItem[] {
+  console.log("Updating goal amounts...");
   //TODO deal with some weird behaviour about the chart updating when the date is changed (after a new goal update has happened) probably to do with having so many state variables as well...
   //update start and end data points
-  const startIndex = graphData.findIndex((data) => data.date === newGoalData.startDate);
-  const endIndex = graphData.findIndex((data) => data.date === newGoalData.endDate);
+  const startDateIndex = graphData.findIndex((data) => data.date === newGoalData.startDate);
+  const endDateIndex = graphData.findIndex((data) => data.date === newGoalData.endDate);
 
-  if (startIndex !== -1) {
-    //existing entry with same date
-    console.log("same start time");
-    graphData[startIndex].goal = newGoalData.startAmount;
+  if (startDateIndex !== -1) {
+    //existing entry with same date, so update that one
+    graphData[startDateIndex].goal = newGoalData.startAmount;
   } else {
     //add new start date entry
     graphData = [{ date: newGoalData.startDate, goal: newGoalData.startAmount, progress: null }, ...graphData];
   }
-  if (endIndex !== -1) {
+  if (endDateIndex !== -1) {
     //existing entry with same date
-    graphData[endIndex].goal = newGoalData.endAmount;
+    graphData[endDateIndex].goal = newGoalData.endAmount;
   } else {
     //add new end date entry
     graphData = [...graphData, { date: newGoalData.endDate, goal: newGoalData.endAmount, progress: null }];
@@ -168,27 +208,28 @@ function updateGoalAmounts(graphData: ChartDataItem[], newGoalData: GoalData): C
 }
 
 function MyTracking() {
-  const [goalData, setGoalData] = useState<GoalData>({
-    startDate: "2025-01-01",
-    endDate: "2025-12-31",
-    startAmount: 0,
-    endAmount: 12000,
-  });
+  const todayDate = new Date();
+  const todayString = todayDate.toISOString().split("T")[0];
 
-  //Hardcoded initial values for demo purpose
-  const demoGraphData: ChartDataItem[] = [
-    { date: goalData.startDate, goal: goalData.startAmount, progress: 0 },
-    { date: "2025-02-01", goal: 1000, progress: 1500 },
-    { date: "2025-03-01", goal: 2000, progress: 2200 },
-    { date: "2025-04-01", goal: 3000, progress: 2450 },
-    { date: "2025-05-01", goal: 4000, progress: 3800 },
-    { date: goalData.endDate, goal: goalData.endAmount, progress: null },
+  //set up default data with about 6 months either side of today
+  const futureMonth = String(todayDate.getMonth() + (6 % 12)).padStart(2, "0");
+  const pastMonth = todayDate.getMonth() - 6 < 1 ? "01" : String(todayDate.getMonth() - 6).padStart(2, "0");
+  const todayYear = String(todayDate.getFullYear());
+  //Hardcoded initial values
+  const initialGoalData = {
+    startDate: `${todayYear}-${pastMonth}-01`,
+    endDate: `${todayYear}-${futureMonth}-28`,
+    startAmount: 0,
+    endAmount: 0,
+  };
+  const initialGraphData: ChartDataItem[] = [
+    { date: initialGoalData.startDate, goal: initialGoalData.startAmount, progress: null },
+    { date: initialGoalData.endDate, goal: initialGoalData.endAmount, progress: null },
   ];
 
+  const [goalData, setGoalData] = useState<GoalData>(initialGoalData);
   // Local state to store the current graph data
-  const [graphData, setGraphData] = useState(demoGraphData);
-  const todayString = new Date().toISOString().split("T")[0];
-  //default is empty -- TODO load in data here
+  const [graphData, setGraphData] = useState(initialGraphData);
   //const [graphData, setGraphData] = useState([{date: todayString, goal: 0, progress: 0}]);
   const [progressFormData, setProgressFormData] = useState("");
   const [progressDateFormData, setProgressDateFormData] = useState("");
@@ -196,6 +237,53 @@ function MyTracking() {
   const [goalStartDateFormData, setStartGoalDateFormData] = useState("");
   const [goalEndFormData, setEndGoalFormData] = useState("");
   const [goalEndDateFormData, setEndGoalDateFormData] = useState("");
+
+  React.useEffect(() => {
+    //load goal data and update state when received
+    async function fetchUserGoals() {
+      console.log("Fetching user goals...");
+      try {
+        const result = await client.graphql({ query: listGoals });
+        const existingGoals = result.data.listGoals;
+        if (existingGoals.items.length === 0) {
+          // wait until the user has made a goal
+          console.log("User has not saved a goal yet.");
+          return;
+        } else {
+          console.log(`Retrieved ${existingGoals.items.length} goals:`, existingGoals);
+          //use the first (and hopefully only) goal in the list
+          //TODO check if there are other goals and delete them (also can add other goals in future though)
+          const existingGoal = existingGoals.items[0];
+          const fetchedGoalData: GoalData = {
+            //This is where the goal id could go to prevent fetching it for updating later.
+            startAmount: existingGoal.startAmount,
+            startDate: existingGoal.startDate,
+            endAmount: existingGoal.endAmount,
+            endDate: existingGoal.endDate,
+          };
+          console.log("Trying to update the graphs with fetched goal data:", fetchedGoalData);
+          // setGoalData(fetchedGoalData);//TODO hmm...
+          //fill in inbetween values
+          const updatedGraphData = updateGoalAmounts(graphData, fetchedGoalData);
+          setGraphData(updatedGraphData);
+        }
+      } catch (err) {
+        console.error("Error fetching goal data:", err);
+      } finally {
+      }
+    }
+    fetchUserGoals();
+  }, []);
+
+  async function deleteAllGoals() {
+    const allGoals = (await client.graphql({ query: listGoals })).data.listGoals;
+    console.log("Deleting goals. Fetching all goals: ", allGoals);
+    for (let index = 0; index < allGoals.items.length; index++) {
+      const id = allGoals.items[index].id;
+      const deleteResult = await client.graphql({ query: deleteGoal, variables: { input: { id: id } } });
+      console.log("Deleted goal: ", deleteResult);
+    }
+  }
 
   const handleAddProgressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,27 +352,26 @@ function MyTracking() {
   const handleAddGoalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const startTime = new Date(goalStartDateFormData).getTime();
-    const endTime = new Date(goalEndDateFormData).getTime();
+    const newStartAmount = parseFloat(goalStartFormData);
+    const newEndAmount = parseFloat(goalEndFormData);
 
-    const newStartGoal = parseFloat(goalStartFormData);
-    const newEndGoal = parseFloat(goalEndFormData);
-
-    if (isNaN(newStartGoal) || isNaN(newEndGoal)) {
+    if (isNaN(newStartAmount) || isNaN(newEndAmount)) {
       throw new Error("Goal amounts must be numbers.");
     }
 
     const newGoal: GoalData = {
       startDate: goalStartDateFormData,
-      startAmount: newStartGoal,
+      startAmount: newStartAmount,
       endDate: goalEndDateFormData,
-      endAmount: newEndGoal,
+      endAmount: newEndAmount,
     };
 
     //fill in inbetween values
-
-    let updatedGraphData = updateGoalAmounts(graphData, newGoal);
+    const updatedGraphData = updateGoalAmounts(graphData, newGoal);
     setGraphData(updatedGraphData);
+
+    //saves goal data to the database
+    saveGoal(goalData);
   };
   // Chart.js options with a time scale for the x-axis.
   const chartOptions: ChartOptions<"line"> = {
@@ -341,9 +428,18 @@ function MyTracking() {
         <h1>On Track - Simple Saver </h1>
       </div>
       <div className="graph" style={{ height: "400px" }}>
+        {/* TODO add refresh button to graph to query database again and consider useEffect().*/}
         <Line data={chartData} options={chartOptions} />
       </div>
-
+      <button
+        style={{ top: "5vw", left: "5vw", position: "absolute" }}
+        onClick={(e: React.FormEvent) => {
+          e.preventDefault();
+          deleteAllGoals();
+        }}
+      >
+        Delete all existing goals
+      </button>
       <div className="add-boxes">
         <div className="add-progress">
           <h2>Progress Update</h2>
