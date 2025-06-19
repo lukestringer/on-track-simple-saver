@@ -37,18 +37,18 @@ import { getGoal, listGoals } from "@/graphql/queries";
 Amplify.configure(awsExports);
 const client = generateClient();
 
-type UserOnTrackData = { goal: GoalData; progressPoints: ChartDataItem[] };
+type OnTrackData = { goal: GoalData; progressPoints: ProgressData[] };
 
-type ChartDataItem = {
+type ProgressData = {
   date: string;
-  goal: number;
-  progress?: number | null;
+  amount: number;
 };
 
-// type ProgressData = {
-//   date: string;
-//   progress: number;
-// };
+type GraphData = {
+  date: string;
+  progressAmount?: number | null;
+  goalAmount: number;
+};
 
 type GoalData = {
   //TODO Add id to GoalData to prevent fetching more than necessary when saving the goal
@@ -58,22 +58,24 @@ type GoalData = {
   endAmount: number;
 };
 
-async function saveGoal(goalInput: GoalData) {
+async function saveGoal(onTrackData: OnTrackData) {
+  const goalInput = onTrackData.goal;
   //TODO prevent updates if existing data is same as old data. (And maybe prevent frequent updates?)
   console.log("Saving goal data...");
   try {
     const listGoalsResult = await client.graphql({ query: listGoals });
+    console.log("Goals retrieved: ", listGoalsResult);
     const listedGoals = listGoalsResult.data.listGoals;
+    const id = listedGoals.items[0].id;
     if (listedGoals.items.length > 0) {
       const input = {
-        id: listedGoals.items[0].id,
-        startAmount: goalInput.startAmount,
-        startDate: goalInput.startDate,
-        endAmount: goalInput.endAmount,
-        endDate: goalInput.endDate,
+        id: id,
+        ...onTrackData.goal,
       };
       const updateResult = await client.graphql({ query: updateGoal, variables: { input: input } });
       console.log("Goal updated:", updateResult.data.updateGoal);
+      const listGoalsResult = await client.graphql({ query: listGoals });
+      console.log("Goals retrieved: ", listGoalsResult);
     } else {
       const createResult = await client.graphql({ query: createGoal, variables: { input: goalInput } });
       console.log("Goal created:", createResult.data.createGoal);
@@ -136,25 +138,25 @@ function calculateGoalAmount(goalData: GoalData, newProgressDate: string): numbe
  * If the new entry's date is later than the last item, it is simply appended.
  * Uses binary search for fast insertion when inserting an older entry.
  *
- * @param graphData - Array of existing progress entries, sorted by date.
+ * @param dateObjects - Array of existing progress entries, sorted by date.
  * @param newEntry - The new progress entry to insert.
  * @returns A new array with the new entry placed in the correct position.
  */
-function insertSortedGraphData(graphData: ChartDataItem[], newEntry: ChartDataItem): ChartDataItem[] {
+function insertIntoSortedDateObjects<T extends { date: string }>(dateObjects: T[], newEntry: T): T[] {
   const newDate: number = new Date(newEntry.date).getTime();
-  const lastEntry = graphData[graphData.length - 1];
+  const lastEntry = dateObjects[dateObjects.length - 1];
 
   // Fast path: If it's the latest date, just push it (O(1))
   if (lastEntry && newDate > new Date(lastEntry.date).getTime()) {
-    return [...graphData, newEntry];
+    return [...dateObjects, newEntry];
   }
 
   // Binary search to find insertion index
   let left = 0,
-    right = graphData.length - 1;
+    right = dateObjects.length - 1;
   while (left <= right) {
     const mid = Math.floor((left + right) / 2);
-    const midDate = new Date(graphData[mid].date).getTime();
+    const midDate = new Date(dateObjects[mid].date).getTime();
     if (midDate < newDate) {
       left = mid + 1;
     } else {
@@ -163,47 +165,41 @@ function insertSortedGraphData(graphData: ChartDataItem[], newEntry: ChartDataIt
   }
 
   // Insert into the correct position (O(n) due to shifting elements)
-  const newGraphData = [...graphData];
-  newGraphData.splice(left, 0, newEntry);
-  return newGraphData;
+  const newDateObjects = [...dateObjects];
+  newDateObjects.splice(left, 0, newEntry);
+  return newDateObjects;
 }
 
-function updateGoalAmounts(graphData: ChartDataItem[], newGoalData: GoalData): ChartDataItem[] {
-  console.log("Updating goal amounts...");
-  //TODO deal with some weird behaviour about the chart updating when the date is changed (after a new goal update has happened) probably to do with having so many state variables as well...
-  //update start and end data points
-  const startDateIndex = graphData.findIndex((data) => data.date === newGoalData.startDate);
-  const endDateIndex = graphData.findIndex((data) => data.date === newGoalData.endDate);
+/**
+ * Creates an array of GraphData objects using the provided OnTrackData.
+ *
+ * @param onTrackData The goal and progress points used to create the GraphData array.
+ * @returns a GraphData array containing all the points needed to draw a graph.
+ */
+function graphOnTrackData(onTrackData: OnTrackData): GraphData[] {
+  let graphData: GraphData[] = [];
 
-  if (startDateIndex !== -1) {
-    //existing entry with same date, so update that one
-    graphData[startDateIndex].goal = newGoalData.startAmount;
-  } else {
-    //add new start date entry
-    graphData = [{ date: newGoalData.startDate, goal: newGoalData.startAmount, progress: null }, ...graphData];
+  const goalStartDate = onTrackData.goal.startDate;
+  const goalStartAmount = onTrackData.goal.startAmount;
+  const goalEndDate = onTrackData.goal.endDate;
+  const goalEndAmount = onTrackData.goal.endAmount;
+
+  let startTime = new Date(goalStartDate).getTime();
+  let endTime = new Date(goalEndDate).getTime();
+  let m = (goalEndAmount - goalStartAmount) / (endTime - startTime);
+  let c = goalEndAmount - m * endTime;
+
+  //add start entry for goal start
+  graphData.push({ date: goalStartDate, progressAmount: null, goalAmount: goalStartAmount });
+  //add all existing progress points with newly calculated goal progress amounts
+  for (let i = 0; i < onTrackData.progressPoints.length; i++) {
+    const progressPoint = onTrackData.progressPoints[i];
+    let time = new Date(progressPoint.date).getTime();
+    const goalProgressAmount = m * time + c;
+    graphData.push({ date: progressPoint.date, progressAmount: progressPoint.amount, goalAmount: goalProgressAmount });
   }
-  if (endDateIndex !== -1) {
-    //existing entry with same date
-    graphData[endDateIndex].goal = newGoalData.endAmount;
-  } else {
-    //add new end date entry
-    graphData = [...graphData, { date: newGoalData.endDate, goal: newGoalData.endAmount, progress: null }];
-  }
-
-  let startTime = new Date(newGoalData.startDate).getTime();
-  let endTime = new Date(newGoalData.endDate).getTime();
-  let m = (newGoalData.endAmount - newGoalData.startAmount) / (endTime - startTime);
-  let c = newGoalData.endAmount - m * endTime;
-
-  for (let i = 0; i < graphData.length; i++) {
-    let time = new Date(graphData[i].date).getTime();
-    graphData[i].goal = m * time + c;
-    //if there are data points outside of new goal data range which don't have progress data, remove them
-    if ((time < startTime || time > endTime) && graphData[i].progress === null) {
-      graphData.splice(i, 1);
-    }
-  }
-
+  //add end entry for goal end
+  graphData.push({ date: goalEndDate, progressAmount: null, goalAmount: goalEndAmount });
   return graphData;
 }
 
@@ -222,13 +218,11 @@ function MyTracking() {
     startAmount: 0,
     endAmount: 0,
   };
-  const initialGraphData: ChartDataItem[] = [
-    { date: initialGoalData.startDate, goal: initialGoalData.startAmount, progress: null },
-    { date: initialGoalData.endDate, goal: initialGoalData.endAmount, progress: null },
-  ];
+  const initialOnTrackData: OnTrackData = { goal: initialGoalData, progressPoints: [] };
 
-  const [goalData, setGoalData] = useState<GoalData>(initialGoalData);
   // Local state to store the current graph data
+  const [onTrackData, setOnTrackData] = useState(initialOnTrackData);
+  let initialGraphData = graphOnTrackData(onTrackData);
   const [graphData, setGraphData] = useState(initialGraphData);
   //const [graphData, setGraphData] = useState([{date: todayString, goal: 0, progress: 0}]);
   const [progressFormData, setProgressFormData] = useState("");
@@ -262,10 +256,11 @@ function MyTracking() {
             endDate: existingGoal.endDate,
           };
           console.log("Trying to update the graphs with fetched goal data:", fetchedGoalData);
-          // setGoalData(fetchedGoalData);//TODO hmm...
-          //fill in inbetween values
-          const updatedGraphData = updateGoalAmounts(graphData, fetchedGoalData);
-          setGraphData(updatedGraphData);
+          const nextOnTrackData: OnTrackData = { goal: fetchedGoalData, progressPoints: onTrackData.progressPoints };
+          setOnTrackData(nextOnTrackData);
+          //update graph data
+          const nextGraphData: GraphData[] = graphOnTrackData(nextOnTrackData);
+          setGraphData(nextGraphData);
         }
       } catch (err) {
         console.error("Error fetching goal data:", err);
@@ -288,65 +283,49 @@ function MyTracking() {
   const handleAddProgressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const newDate = progressDateFormData; //convenience var
-    const newProgress = parseFloat(progressFormData);
+    const nextProgressDate = progressDateFormData; //convenience var
+    const nextProgressAmount = parseFloat(progressFormData);
 
     // Validate that the selected date defined and is not in the future.
-    if (newDate != undefined && new Date(newDate).getTime() > new Date(todayString).getTime()) {
+    if (nextProgressDate != undefined && new Date(nextProgressDate).getTime() > new Date(todayString).getTime()) {
       //TODO show error on date field or progress field
+      console.error("Adding Progress: date error.");
       return;
     }
-    if (isNaN(newProgress)) {
+    if (isNaN(nextProgressAmount)) {
       //TODO show error on progress
+      console.error("Adding Progress: progress amount error.");
       return;
     }
 
-    let updatedGraphData: ChartDataItem[];
-    const index = graphData.findIndex((data) => data.date === newDate);
-    if (index !== -1) {
+    let nextOnTrackData: OnTrackData = onTrackData;
+    let nextGraphData: GraphData[] = graphData;
+    let nextGoalAmount: number;
+    let progressData = onTrackData.progressPoints;
+    const nextProgressDateIndex = progressData.findIndex((data) => data.date === nextProgressDate);
+    if (nextProgressDateIndex !== -1) {
       // If the progress date already exists, replace it.
       //TODO ask user if they want to replace it or use old value
-      updatedGraphData = [...graphData];
-      updatedGraphData[index] = {
-        date: newDate,
-        progress: newProgress,
-        goal: calculateGoalAmount(goalData, newDate),
+      nextOnTrackData.progressPoints = [...progressData];
+      nextOnTrackData.progressPoints[nextProgressDateIndex] = {
+        date: nextProgressDate,
+        amount: nextProgressAmount,
       };
+      // don't need to update goal amount because already calculated.
     } else {
       // Otherwise, simply append a new entry.
-      const newGoalAmount = calculateGoalAmount(goalData, newDate);
-      const newData = { date: newDate, progress: newProgress, goal: newGoalAmount };
-      updatedGraphData = insertSortedGraphData(graphData, newData);
+      const nextProgressData: ProgressData = { date: nextProgressDate, amount: nextProgressAmount };
+      nextOnTrackData.progressPoints = insertIntoSortedDateObjects(progressData, nextProgressData);
+      //and calculate an accompanying goal amount and add to the graph data
+      nextGoalAmount = calculateGoalAmount(onTrackData.goal, nextProgressDate);
+      nextGraphData = insertIntoSortedDateObjects(nextGraphData, {
+        date: nextProgressDate,
+        progressAmount: nextProgressAmount,
+        goalAmount: nextGoalAmount,
+      });
     }
-
-    setGraphData(updatedGraphData);
-  };
-
-  // Prepare Chart.js data: using object notation in the datasets so that the
-  // time scale reads the x (date) values correctly.
-  const chartData = {
-    datasets: [
-      {
-        label: "Goal Line",
-        data: graphData.map((item) => ({ x: item.date, y: item.goal })),
-        borderColor: "#000000",
-        borderWidth: 3,
-        fill: false,
-        tension: 0,
-        pointRadius: 0,
-        spanGaps: true,
-      },
-      {
-        label: "Progress",
-        data: graphData.map((item) => ({ x: item.date, y: item.progress })),
-        borderColor: "#00853f",
-        borderWidth: 3,
-        stepped: true,
-        fill: false,
-        pointRadius: 3,
-        spanGaps: true,
-      },
-    ],
+    setOnTrackData(nextOnTrackData);
+    setGraphData(nextGraphData);
   };
 
   const handleAddGoalSubmit = (e: React.FormEvent) => {
@@ -366,12 +345,14 @@ function MyTracking() {
       endAmount: newEndAmount,
     };
 
-    //fill in inbetween values
-    const updatedGraphData = updateGoalAmounts(graphData, newGoal);
-    setGraphData(updatedGraphData);
+    const nextOnTrackData: OnTrackData = { goal: newGoal, progressPoints: onTrackData.progressPoints };
+    setOnTrackData(nextOnTrackData);
+
+    const nextGraphData = graphOnTrackData(nextOnTrackData);
+    setGraphData(nextGraphData);
 
     //saves goal data to the database
-    saveGoal(goalData);
+    saveGoal(nextOnTrackData);
   };
   // Chart.js options with a time scale for the x-axis.
   const chartOptions: ChartOptions<"line"> = {
@@ -420,6 +401,33 @@ function MyTracking() {
         },
       },
     },
+  };
+
+  // Prepare Chart.js data: using object notation in the datasets so that the
+  // time scale reads the x (date) values correctly.
+  const chartData = {
+    datasets: [
+      {
+        label: "Goal Line",
+        data: graphData.map((item) => ({ x: item.date, y: item.goalAmount })),
+        borderColor: "#000000",
+        borderWidth: 3,
+        fill: false,
+        tension: 0,
+        pointRadius: 0,
+        spanGaps: true,
+      },
+      {
+        label: "Progress",
+        data: graphData.map((item) => ({ x: item.date, y: item.progressAmount })),
+        borderColor: "#00853f",
+        borderWidth: 3,
+        stepped: true,
+        fill: false,
+        pointRadius: 3,
+        spanGaps: true,
+      },
+    ],
   };
 
   return (

@@ -88,6 +88,7 @@ export const onCreateProgressUpdate = /* GraphQL */ `subscription OnCreateProgre
     id
     date
     amount
+    goalProgress
     owner
     createdAt
     updatedAt
@@ -107,6 +108,7 @@ export const onUpdateProgressUpdate = /* GraphQL */ `subscription OnUpdateProgre
     id
     date
     amount
+    goalProgress
     owner
     createdAt
     updatedAt
@@ -126,6 +128,7 @@ export const onDeleteProgressUpdate = /* GraphQL */ `subscription OnDeleteProgre
     id
     date
     amount
+    goalProgress
     owner
     createdAt
     updatedAt

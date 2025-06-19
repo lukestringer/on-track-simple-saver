@@ -88,6 +88,7 @@ export const createProgressUpdate = /* GraphQL */ `mutation CreateProgressUpdate
     id
     date
     amount
+    goalProgress
     owner
     createdAt
     updatedAt
@@ -107,6 +108,7 @@ export const updateProgressUpdate = /* GraphQL */ `mutation UpdateProgressUpdate
     id
     date
     amount
+    goalProgress
     owner
     createdAt
     updatedAt
@@ -126,6 +128,7 @@ export const deleteProgressUpdate = /* GraphQL */ `mutation DeleteProgressUpdate
     id
     date
     amount
+    goalProgress
     owner
     createdAt
     updatedAt

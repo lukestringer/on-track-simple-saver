@@ -1,6 +1,4 @@
-type Goal 
-@model 
-@auth(rules: [{ allow: owner}]) {
+type Goal @model @auth(rules: [{ allow: owner }]) {
   id: ID! @primaryKey
   startDate: AWSDate! #"YYYY-MM-DD"
   startAmount: Float!
@@ -10,9 +8,7 @@ type Goal
   owner: String @auth(rules: [{ allow: owner, operations: [read, delete] }])
 }
 
-type ProgressUpdate 
-@model 
-@auth(rules: [{ allow: owner}]) {
+type ProgressUpdate @model @auth(rules: [{ allow: owner }]) {
   id: ID! @primaryKey
   date: AWSDate!
   amount: Float!
