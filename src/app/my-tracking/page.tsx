@@ -34,6 +34,7 @@ import { Line } from "react-chartjs-2";
 import { withAuthenticator } from "@aws-amplify/ui-react";
 import { listGoals, listProgressUpdates } from "@/graphql/queries";
 import { CreateGoalInput, UpdateGoalInput } from "@/API";
+import Link from "next/link";
 
 Amplify.configure(awsExports);
 const client = generateClient();
@@ -605,4 +606,23 @@ function MyTracking() {
   );
 }
 
-export default withAuthenticator(MyTracking);
+// Define a custom header component.
+function CustomHeader() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "1rem",
+        borderBottom: "1px solid #ccc",
+      }}
+    >
+      <Link href="/" style={{ left: "45vw" }}>
+        <button>Return to demo</button>
+      </Link>
+    </div>
+  );
+}
+
+export default withAuthenticator(MyTracking, { components: { Header: CustomHeader } });
