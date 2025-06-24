@@ -61,7 +61,6 @@ export const getProgressUpdate = /* GraphQL */ `query GetProgressUpdate($id: ID!
     id
     date
     amount
-    goalProgress
     owner
     createdAt
     updatedAt
@@ -91,7 +90,6 @@ export const listProgressUpdates = /* GraphQL */ `query ListProgressUpdates(
       id
       date
       amount
-      goalProgress
       owner
       createdAt
       updatedAt

@@ -32,14 +32,24 @@ import annotationPlugin from "chartjs-plugin-annotation";
 import "chartjs-adapter-date-fns"; // Date adapter for time scale support
 import { Line } from "react-chartjs-2";
 import { withAuthenticator } from "@aws-amplify/ui-react";
-import { getGoal, listGoals } from "@/graphql/queries";
+import { listGoals, listProgressUpdates } from "@/graphql/queries";
+import { CreateGoalInput, UpdateGoalInput } from "@/API";
 
 Amplify.configure(awsExports);
 const client = generateClient();
 
 type OnTrackData = { goal: GoalData; progressPoints: ProgressData[] };
 
+type GoalData = {
+  goalID: string;
+  startDate: string;
+  startAmount: number;
+  endDate: string;
+  endAmount: number;
+};
+
 type ProgressData = {
+  progressID: String;
   date: string;
   amount: number;
 };
@@ -49,50 +59,6 @@ type GraphData = {
   progressAmount?: number | null;
   goalAmount: number;
 };
-
-type GoalData = {
-  //TODO Add id to GoalData to prevent fetching more than necessary when saving the goal
-  startDate: string;
-  startAmount: number;
-  endDate: string;
-  endAmount: number;
-};
-
-async function saveGoal(onTrackData: OnTrackData) {
-  const goalInput = onTrackData.goal;
-  //TODO prevent updates if existing data is same as old data. (And maybe prevent frequent updates?)
-  console.log("Saving goal data...");
-  try {
-    const listGoalsResult = await client.graphql({ query: listGoals });
-    console.log("Goals retrieved: ", listGoalsResult);
-    const listedGoals = listGoalsResult.data.listGoals;
-    const id = listedGoals.items[0].id;
-    if (listedGoals.items.length > 0) {
-      const input = {
-        id: id,
-        ...onTrackData.goal,
-      };
-      const updateResult = await client.graphql({ query: updateGoal, variables: { input: input } });
-      console.log("Goal updated:", updateResult.data.updateGoal);
-      const listGoalsResult = await client.graphql({ query: listGoals });
-      console.log("Goals retrieved: ", listGoalsResult);
-    } else {
-      const createResult = await client.graphql({ query: createGoal, variables: { input: goalInput } });
-      console.log("Goal created:", createResult.data.createGoal);
-    }
-  } catch (error) {
-    console.error("Error creating goal:", error);
-  }
-}
-
-async function handleSignOut() {
-  try {
-    await signOut();
-    //TODO redirect to home page
-  } catch (error) {
-    console.log("error signing out: ", error);
-  }
-}
 
 // Register the necessary Chart.js components
 ChartJS.register(
@@ -129,7 +95,8 @@ function calculateGoalAmount(goalData: GoalData, newProgressDate: string): numbe
 
   const progressPercentage = (progressTime - startTime) / (endTime - startTime);
   const goalAmount = progressPercentage * (goalData.endAmount - goalData.startAmount) + goalData.startAmount;
-  return goalAmount;
+  //return only to two decimal places
+  return Math.round(goalAmount * 100) / 100;
 }
 
 /**
@@ -212,7 +179,8 @@ function MyTracking() {
   const pastMonth = todayDate.getMonth() - 6 < 1 ? "01" : String(todayDate.getMonth() - 6).padStart(2, "0");
   const todayYear = String(todayDate.getFullYear());
   //Hardcoded initial values
-  const initialGoalData = {
+  const initialGoalData: GoalData = {
+    goalID: "", //empty for now until it's generated and passed back
     startDate: `${todayYear}-${pastMonth}-01`,
     endDate: `${todayYear}-${futureMonth}-28`,
     startAmount: 0,
@@ -234,29 +202,40 @@ function MyTracking() {
 
   React.useEffect(() => {
     //load goal data and update state when received
-    async function fetchUserGoals() {
-      console.log("Fetching user goals...");
+    async function fetchUserOnTrackData() {
+      //TODO Solve double fetching of goals...
       try {
         const result = await client.graphql({ query: listGoals });
-        const existingGoals = result.data.listGoals;
-        if (existingGoals.items.length === 0) {
+        const fetchedGoals = result.data.listGoals;
+        console.log(fetchedGoals);
+        if (fetchedGoals.items.length === 0) {
           // wait until the user has made a goal
-          console.log("User has not saved a goal yet.");
           return;
         } else {
-          console.log(`Retrieved ${existingGoals.items.length} goals:`, existingGoals);
           //use the first (and hopefully only) goal in the list
           //TODO check if there are other goals and delete them (also can add other goals in future though)
-          const existingGoal = existingGoals.items[0];
-          const fetchedGoalData: GoalData = {
-            //This is where the goal id could go to prevent fetching it for updating later.
-            startAmount: existingGoal.startAmount,
-            startDate: existingGoal.startDate,
-            endAmount: existingGoal.endAmount,
-            endDate: existingGoal.endDate,
+          const fetchedGoalData = fetchedGoals.items[0]; //assumes they're returned in the same order each time...
+          const fetchedGoal: GoalData = {
+            goalID: fetchedGoalData.id, //have to do this because goalID is not the same as id.
+            startAmount: fetchedGoalData.startAmount,
+            startDate: fetchedGoalData.startDate,
+            endAmount: fetchedGoalData.endAmount,
+            endDate: fetchedGoalData.endDate,
           };
-          console.log("Trying to update the graphs with fetched goal data:", fetchedGoalData);
-          const nextOnTrackData: OnTrackData = { goal: fetchedGoalData, progressPoints: onTrackData.progressPoints };
+
+          let fetchedProgressUpdates = (await client.graphql({ query: listProgressUpdates })).data.listProgressUpdates;
+          // let fetchedProgressPoints: ProgressData[] = [];
+
+          const fetchedProgressPoints: ProgressData[] = fetchedProgressUpdates.items
+            .map((item) => ({
+              progressID: item.id, // Rename id to progressID
+              date: item.date,
+              amount: item.amount,
+            }))
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          console.log(fetchedProgressPoints);
+
+          const nextOnTrackData: OnTrackData = { goal: fetchedGoal, progressPoints: fetchedProgressPoints };
           setOnTrackData(nextOnTrackData);
           //update graph data
           const nextGraphData: GraphData[] = graphOnTrackData(nextOnTrackData);
@@ -267,66 +246,203 @@ function MyTracking() {
       } finally {
       }
     }
-    fetchUserGoals();
+    fetchUserOnTrackData();
   }, []);
 
-  async function deleteAllGoals() {
+  async function deleteAllGoalsAndProgressUpdates() {
     const allGoals = (await client.graphql({ query: listGoals })).data.listGoals;
-    console.log("Deleting goals. Fetching all goals: ", allGoals);
     for (let index = 0; index < allGoals.items.length; index++) {
       const id = allGoals.items[index].id;
       const deleteResult = await client.graphql({ query: deleteGoal, variables: { input: { id: id } } });
       console.log("Deleted goal: ", deleteResult);
     }
+
+    const allProgressUpdates = (await client.graphql({ query: listProgressUpdates })).data.listProgressUpdates;
+    for (let i = 0; i < allProgressUpdates.items.length; i++) {
+      const progressUpdate = allProgressUpdates.items[i];
+      const id = progressUpdate.id;
+      const deleteResult = await client.graphql({ query: deleteProgressUpdate, variables: { input: { id: id } } });
+      console.log("Deleted progress update: ", deleteResult);
+    }
+
+    const nextOnTrackData = { goal: initialGoalData, progressPoints: [] };
+    setOnTrackData(nextOnTrackData);
+    const nextGraphData = graphOnTrackData(nextOnTrackData);
+    setGraphData(nextGraphData);
+  }
+  /**
+   * This function updates the database with the goal (updating an existing one or adding a new one if none exists)
+   * and if a new goal is created, local on track data is updated with its goal ID.
+   * @param onTrackData contains the new goal to post to the database
+   */
+  async function postGoalAndSetOnTrack(onTrackData: OnTrackData) {
+    //TODO prevent updates if existing data is same as old data. (And maybe prevent frequent updates?)
+    try {
+      const listGoalsResult = await client.graphql({ query: listGoals });
+      const listedGoals = listGoalsResult.data.listGoals;
+      if (listedGoals.items.length > 0) {
+        //if there is an existing goal returned, grab it's id and then use that id to update it with the amount.
+        const updateGoalInputWithID: UpdateGoalInput = {
+          id: listedGoals.items[0].id,
+          startDate: onTrackData.goal.startDate,
+          startAmount: onTrackData.goal.startAmount,
+          endDate: onTrackData.goal.endDate,
+          endAmount: onTrackData.goal.endAmount,
+        };
+        const updateResult = await client.graphql({ query: updateGoal, variables: { input: updateGoalInputWithID } });
+        const listGoalsResult = await client.graphql({ query: listGoals });
+      } else {
+        const createGoalInput: CreateGoalInput = {
+          startDate: onTrackData.goal.startDate,
+          startAmount: onTrackData.goal.startAmount,
+          endDate: onTrackData.goal.endDate,
+          endAmount: onTrackData.goal.endAmount,
+        };
+        const createResult = await client.graphql({ query: createGoal, variables: { input: createGoalInput } });
+        //update goal id
+        const goalID: string = createResult.data.createGoal.id;
+        const nextOnTrackData: OnTrackData = { goal: onTrackData.goal, progressPoints: onTrackData.progressPoints };
+        nextOnTrackData.goal.goalID = goalID;
+        setOnTrackData(nextOnTrackData);
+      }
+    } catch (error) {
+      console.error("Error creating goal:", error);
+    }
   }
 
-  const handleAddProgressSubmit = (e: React.FormEvent) => {
+  function updateOnTrackWithProgressID(onTrackData: OnTrackData, progressData: ProgressData): OnTrackData {
+    let nextOnTrackData: OnTrackData = { goal: onTrackData.goal, progressPoints: onTrackData.progressPoints };
+    const progressIndex = nextOnTrackData.progressPoints.findIndex((data) => data.date === progressData.date);
+    try {
+      if (progressIndex !== -1) {
+        nextOnTrackData.progressPoints[progressIndex] = progressData;
+      } else {
+        nextOnTrackData.progressPoints.push(progressData);
+      }
+    } catch (error) {
+      console.error("Can't find the provided progress data in the provided On Track data:", error);
+    }
+    return nextOnTrackData;
+  }
+
+  /**
+   * Updates the existing progress update with matching ID to provided progress data.
+   * @param progressData The progress data to update existing values with.
+   */
+  async function postUpdateProgress(progressData: ProgressData) {
+    const progressID = progressData.progressID;
+    if (progressID === "") {
+      console.error("Empty progress ID provided when updating database progress... Is this an new progress update?");
+    }
+    try {
+      const updateResult = await client.graphql({
+        query: updateProgressUpdate,
+        variables: { input: { id: String(progressID), amount: progressData.amount } },
+      });
+    } catch (error) {
+      console.error("Error posting existing progress data update:", error);
+    }
+  }
+
+  /**
+   * Creates a new progress update in the database and updates the local progress data id with the returned one.
+   * @param progressData
+   */
+  async function postNewProgress(progressData: ProgressData) {
+    try {
+      const input = { date: progressData.date, amount: progressData.amount };
+      const newResult = await client.graphql({ query: createProgressUpdate, variables: { input: input } });
+      const resultData = newResult.data.createProgressUpdate;
+      //add the id to the right progress data in the on track data
+      const progressWithID: ProgressData = {
+        progressID: resultData.id,
+        date: progressData.date,
+        amount: progressData.amount,
+      };
+      const nextOnTrackData = updateOnTrackWithProgressID(onTrackData, progressWithID);
+      setOnTrackData(nextOnTrackData);
+    } catch (error) {
+      console.error("Error posting new progress update:", error);
+    }
+  }
+
+  async function handleSignOut() {
+    try {
+      await signOut();
+      //TODO redirect to home page
+    } catch (error) {}
+  }
+
+  function handleAddProgressSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const nextProgressDate = progressDateFormData; //convenience var
+    const nextProgressDate = progressDateFormData;
     const nextProgressAmount = parseFloat(progressFormData);
 
     // Validate that the selected date defined and is not in the future.
     if (nextProgressDate != undefined && new Date(nextProgressDate).getTime() > new Date(todayString).getTime()) {
-      //TODO show error on date field or progress field
       console.error("Adding Progress: date error.");
       return;
     }
     if (isNaN(nextProgressAmount)) {
-      //TODO show error on progress
       console.error("Adding Progress: progress amount error.");
       return;
     }
 
-    let nextOnTrackData: OnTrackData = onTrackData;
-    let nextGraphData: GraphData[] = graphData;
-    let nextGoalAmount: number;
-    let progressData = onTrackData.progressPoints;
-    const nextProgressDateIndex = progressData.findIndex((data) => data.date === nextProgressDate);
-    if (nextProgressDateIndex !== -1) {
-      // If the progress date already exists, replace it.
+    let nextOnTrackData: OnTrackData = { goal: onTrackData.goal, progressPoints: onTrackData.progressPoints };
+    let nextGraphData: GraphData[] = [...graphData];
+
+    let existingProgress: ProgressData | null = null;
+    console.log("Checking existing progress points:", nextOnTrackData.progressPoints);
+    for (let i = 0; i < nextOnTrackData.progressPoints.length; i++) {
+      const progress = nextOnTrackData.progressPoints[i];
+      if (progress.date == nextProgressDate) {
+        console.log("It matches!");
+        existingProgress = progress;
+        console.log("Existing progress found, before update:", existingProgress);
+        existingProgress.amount = nextProgressAmount;
+        console.log("After update:", existingProgress);
+      }
+    }
+    if (existingProgress != null) {
       //TODO ask user if they want to replace it or use old value
-      nextOnTrackData.progressPoints = [...progressData];
-      nextOnTrackData.progressPoints[nextProgressDateIndex] = {
-        date: nextProgressDate,
-        amount: nextProgressAmount,
-      };
-      // don't need to update goal amount because already calculated.
+      // If a progress update with the same date already exists, replace the progress amount.
+      // (Don't need to update date or goal as they're unchanged.)
+      existingProgress.amount = nextProgressAmount;
+      // need to update graph data to new progress value
+      let matchingGraph: GraphData | null = null;
+      for (let i = 0; i < nextGraphData.length; i++) {
+        const graphData = nextGraphData[i];
+        if (graphData.date == nextProgressDate) {
+          matchingGraph = graphData;
+          break;
+        }
+      }
+      if (matchingGraph != null) {
+        matchingGraph.progressAmount = nextProgressAmount;
+      } else {
+        console.error("Couldn't find a graph entry with the same date.");
+      }
+
+      //Update database
+      postUpdateProgress(existingProgress);
     } else {
       // Otherwise, simply append a new entry.
-      const nextProgressData: ProgressData = { date: nextProgressDate, amount: nextProgressAmount };
-      nextOnTrackData.progressPoints = insertIntoSortedDateObjects(progressData, nextProgressData);
+      let nextProgressData: ProgressData = { progressID: "", date: nextProgressDate, amount: nextProgressAmount };
+      nextOnTrackData.progressPoints = insertIntoSortedDateObjects(nextOnTrackData.progressPoints, nextProgressData);
       //and calculate an accompanying goal amount and add to the graph data
-      nextGoalAmount = calculateGoalAmount(onTrackData.goal, nextProgressDate);
+      let nextGoalProgressAmount: number = calculateGoalAmount(nextOnTrackData.goal, nextProgressDate);
       nextGraphData = insertIntoSortedDateObjects(nextGraphData, {
         date: nextProgressDate,
         progressAmount: nextProgressAmount,
-        goalAmount: nextGoalAmount,
+        goalAmount: nextGoalProgressAmount,
       });
+      // Add a new entry to the database (function also stores returned id)
+      postNewProgress(nextProgressData);
     }
     setOnTrackData(nextOnTrackData);
     setGraphData(nextGraphData);
-  };
+  }
 
   const handleAddGoalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -339,6 +455,7 @@ function MyTracking() {
     }
 
     const newGoal: GoalData = {
+      goalID: "",
       startDate: goalStartDateFormData,
       startAmount: newStartAmount,
       endDate: goalEndDateFormData,
@@ -346,13 +463,12 @@ function MyTracking() {
     };
 
     const nextOnTrackData: OnTrackData = { goal: newGoal, progressPoints: onTrackData.progressPoints };
-    setOnTrackData(nextOnTrackData);
+    // setOnTrackData(nextOnTrackData); //this is done in post goal anyway.
+    //saves goal data to the database
+    postGoalAndSetOnTrack(nextOnTrackData);
 
     const nextGraphData = graphOnTrackData(nextOnTrackData);
     setGraphData(nextGraphData);
-
-    //saves goal data to the database
-    saveGoal(nextOnTrackData);
   };
   // Chart.js options with a time scale for the x-axis.
   const chartOptions: ChartOptions<"line"> = {
@@ -443,10 +559,10 @@ function MyTracking() {
         style={{ top: "5vw", left: "5vw", position: "absolute" }}
         onClick={(e: React.FormEvent) => {
           e.preventDefault();
-          deleteAllGoals();
+          deleteAllGoalsAndProgressUpdates();
         }}
       >
-        Delete all existing goals
+        Delete all existing goals and progress updates
       </button>
       <div className="add-boxes">
         <div className="add-progress">
