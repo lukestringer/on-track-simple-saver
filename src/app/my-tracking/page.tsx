@@ -207,7 +207,6 @@ function MyTracking() {
       try {
         const result = await client.graphql({ query: listGoals });
         const fetchedGoals = result.data.listGoals;
-        console.log(fetchedGoals);
         if (fetchedGoals.items.length === 0) {
           // wait until the user has made a goal
           return;
@@ -233,7 +232,6 @@ function MyTracking() {
               amount: item.amount,
             }))
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          console.log(fetchedProgressPoints);
 
           const nextOnTrackData: OnTrackData = { goal: fetchedGoal, progressPoints: fetchedProgressPoints };
           setOnTrackData(nextOnTrackData);
@@ -372,15 +370,11 @@ function MyTracking() {
     let nextGraphData: GraphData[] = [...graphData];
 
     let existingProgress: ProgressData | null = null;
-    console.log("Checking existing progress points:", nextOnTrackData.progressPoints);
     for (let i = 0; i < nextOnTrackData.progressPoints.length; i++) {
       const progress = nextOnTrackData.progressPoints[i];
       if (progress.date == nextProgressDate) {
-        console.log("It matches!");
         existingProgress = progress;
-        console.log("Existing progress found, before update:", existingProgress);
         existingProgress.amount = nextProgressAmount;
-        console.log("After update:", existingProgress);
       }
     }
     if (existingProgress != null) {
