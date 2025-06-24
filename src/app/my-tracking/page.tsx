@@ -249,27 +249,6 @@ function MyTracking() {
     fetchUserOnTrackData();
   }, []);
 
-  async function deleteAllGoalsAndProgressUpdates() {
-    const allGoals = (await client.graphql({ query: listGoals })).data.listGoals;
-    for (let index = 0; index < allGoals.items.length; index++) {
-      const id = allGoals.items[index].id;
-      const deleteResult = await client.graphql({ query: deleteGoal, variables: { input: { id: id } } });
-      console.log("Deleted goal: ", deleteResult);
-    }
-
-    const allProgressUpdates = (await client.graphql({ query: listProgressUpdates })).data.listProgressUpdates;
-    for (let i = 0; i < allProgressUpdates.items.length; i++) {
-      const progressUpdate = allProgressUpdates.items[i];
-      const id = progressUpdate.id;
-      const deleteResult = await client.graphql({ query: deleteProgressUpdate, variables: { input: { id: id } } });
-      console.log("Deleted progress update: ", deleteResult);
-    }
-
-    const nextOnTrackData = { goal: initialGoalData, progressPoints: [] };
-    setOnTrackData(nextOnTrackData);
-    const nextGraphData = graphOnTrackData(nextOnTrackData);
-    setGraphData(nextGraphData);
-  }
   /**
    * This function updates the database with the goal (updating an existing one or adding a new one if none exists)
    * and if a new goal is created, local on track data is updated with its goal ID.
@@ -555,15 +534,6 @@ function MyTracking() {
         {/* TODO add refresh button to graph to query database again and consider useEffect().*/}
         <Line data={chartData} options={chartOptions} />
       </div>
-      <button
-        style={{ top: "5vw", left: "5vw", position: "absolute" }}
-        onClick={(e: React.FormEvent) => {
-          e.preventDefault();
-          deleteAllGoalsAndProgressUpdates();
-        }}
-      >
-        Delete all existing goals and progress updates
-      </button>
       <div className="add-boxes">
         <div className="add-progress">
           <h2>Progress Update</h2>
