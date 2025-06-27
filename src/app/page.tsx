@@ -177,7 +177,7 @@ function Home() {
 
   // Local state to store the current graph data
   const [graphData, setGraphData] = useState(demoGraphData);
-  const todayString = new Date().toISOString().split("T")[0];
+  const [todayState, setTodaySate] = useState(new Date().toISOString().split("T")[0]);
   //default is empty -- TODO load in data here
   //const [graphData, setGraphData] = useState([{date: todayString, goal: 0, progress: 0}]);
   const [progressFormData, setProgressFormData] = useState("");
@@ -194,7 +194,7 @@ function Home() {
     const newProgress = parseFloat(progressFormData);
 
     // Validate that the selected date defined and is not in the future.
-    if (newDate != undefined && new Date(newDate).getTime() > new Date(todayString).getTime()) {
+    if (newDate != undefined && new Date(newDate).getTime() > new Date(todayState).getTime()) {
       //TODO show error on date field or progress field
       return;
     }
@@ -315,8 +315,8 @@ function Home() {
           todayLine: {
             type: "line",
             // Using xMin and xMax creates a vertical line at the given date value.
-            xMin: todayString,
-            xMax: todayString,
+            xMin: todayState,
+            xMax: todayState,
             borderColor: "blue",
             borderWidth: 2,
           },
@@ -324,6 +324,11 @@ function Home() {
       },
     },
   };
+
+  React.useEffect(() => {
+    const nextToday = new Date().toISOString().split("T")[0];
+    setTodaySate(nextToday);
+  });
 
   return (
     <div className="base-container">
@@ -356,7 +361,7 @@ function Home() {
                 type="date"
                 value={progressDateFormData}
                 onChange={(e) => setProgressDateFormData(e.target.value)}
-                max={todayString} // Prevents selecting future dates
+                max={todayState} // Prevents selecting future dates
                 required
               />
             </label>
